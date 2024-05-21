@@ -1,0 +1,12 @@
+[environments.development]
+url = "jdbc:sqlserver://localhost;databaseName=SqlServerCentral_3Dev;encrypt=false;integratedSecurity=true"
+displayName = "Development database"
+
+[environments.QA]
+url = "jdbc:sqlserver://localhost;databaseName=SqlServerCentral_2QA;encrypt=false;integratedSecurity=true"
+displayName = "QA"
+
+[environments.shadow]
+url = "jdbc:sqlserver://localhost;databaseName=SqlServerCentral_Shadow;encrypt=false;integratedSecurity=true"
+displayName = "Shadow database"
+provisioner = "clean"

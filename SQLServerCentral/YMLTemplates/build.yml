@@ -1,0 +1,53 @@
+parameters:
+- name: stage
+  default: Build
+- name: displayName
+  default: CI Build and Code Validation
+- name: executeBuild
+  default: true
+- name: targetCredentials
+  default: ''
+- name: pipelineParameters
+  default: ''
+  
+stages:
+  - ${{if eq(parameters.executeBuild, true)}}:
+    - stage: Build
+      pool: $(AGENT_POOL)
+      displayName: ${{parameters.displayName}} 
+      jobs:
+      - job: Build
+        variables:
+        - group: ${{parameters.targetCredentials}}
+        - group: ${{parameters.pipelineParameters}}
+        - group: redgate_global_vars
+        steps:
+          
+          - script: '$(FLYWAY) check -changes -drift -code migrate info -url="$(target_database_JDBC)" -check.buildUrl="$(check_database_JDBC)" -reportFilename="$(System.ArtifactsDirectory)\BuildDB-$(Build.BuildId).html"'
+            failOnStderr: true
+            displayName: 'Validate, Analyse Code and Migrate Pending Migration Scripts'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Report'
+            condition: always()
+            inputs:
+              ArtifactName: 'Change, Code and Migration Report'
+              PathtoPublish: '$(System.ArtifactsDirectory)\BuildDB-$(Build.BuildId).html' 
+
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                Invoke-Sqlcmd -ServerInstance "localhost" -Database "SQLServerCentral_Build" -Query "BEGIN TRY EXEC tSQLt.RunAll END TRY BEGIN CATCH END CATCH; EXEC tSQLt.XmlResultFormatter" -MaxCharLength 1000000 | %{ $out = $out + $_[0]}; $out > "$(WORKING_DIRECTORY)\DatabaseTestResults.xml"
+                Write-Host "##vso[results.publish type=JUnit;resultFiles="$(WORKING_DIRECTORY)\DatabaseTestResults.xml";]"
+                ### End of Automatic Migration Script Creation ###
+            displayName: 'Run tSQLt Tests'        
+
+          - script: '$(FLYWAY) undo info -url="$(target_database_JDBC)" -target="$(FIRST_UNDO_SCRIPT)"?'
+            continueOnError: true
+            displayName: 'Validate All Undo Scripts'
+          
+          - script: '$(FLYWAY) migrate info -url="$(target_database_JDBC)"'
+            failOnStderr: true
+            displayName: 'Re-Validate All Migration Scripts'
+
